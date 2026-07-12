@@ -1,0 +1,32 @@
+name: MCP Gateway CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-validate:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        
+    - name: Install dependencies
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv pip install system -r requirements.txt
+        uv pip install system pytest httpx
+        
+    - name: Run Security Tests
+      run: pytest test_gateway.py
+      
+    - name: Validate Docker Compose
+      run: docker compose build
