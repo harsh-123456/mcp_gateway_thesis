@@ -22,8 +22,8 @@ jobs:
     - name: Install dependencies
       run: |
         curl -LsSf https://astral.sh/uv/install.sh | sh
-        uv pip install system -r requirements.txt
-        uv pip install system pytest httpx
+        uv pip install --system -r requirements.txt
+        uv pip install --system pytest httpx
         
     - name: Run Security Tests
       run: pytest test_gateway.py
