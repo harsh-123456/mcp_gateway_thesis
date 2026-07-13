@@ -8,7 +8,7 @@ import httpx
 import redis.asyncio as redis
 from sqlalchemy.future import select
 from prometheus_fastapi_instrumentator import Instrumentator
-from database import SessionLocal, Role, AuditLog
+from database import SessionLocal, Role, AuditLog, engine
 
 app = FastAPI(title="Enterprise Policy-Aware MCP Gateway")
 
@@ -30,8 +30,11 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    await http_client.aclose()
-    await redis_client.aclose()
+    if http_client:
+        await http_client.aclose()
+    if redis_client:
+        await redis_client.aclose()
+    await engine.dispose()
 
 async def check_rate_limit(agent_role: str) -> bool:
     key = f"rate_limit:{agent_role}"
@@ -94,7 +97,7 @@ async def proxy_tool_call_sse(request: Request):
             audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="BLOCKED", reason="Restricted argument accessed")
             db.add(audit)
             await db.commit()
-            return {"error": "SECURITY EXCEPTION: Restricted argument accessed."}
+            raise HTTPException(status_code=403, detail="SECURITY EXCEPTION: Restricted argument accessed.")
 
         audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="APPROVED", reason="Passed security")
         db.add(audit)
