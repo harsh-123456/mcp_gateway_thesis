@@ -14,6 +14,9 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Start Background Services
+        run: docker compose up -d
+
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
@@ -27,6 +30,3 @@ jobs:
 
       - name: Run Security Tests
         run: pytest test_gateway.py
-
-      - name: Validate Docker Compose
-        run: docker compose build
