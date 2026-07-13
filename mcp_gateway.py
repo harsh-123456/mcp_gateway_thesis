@@ -77,28 +77,31 @@ async def proxy_tool_call_sse(request: Request):
     tool_name = body.get("name")
     args = body.get("arguments", {})
 
-    # CRITICAL ARCHITECTURE FIX: Open and close DB session BEFORE the stream begins.
+    # 3. RBAC Inspection & Security Auditing (Isolated Sessions)
     async with SessionLocal() as db:
-        # 3. RBAC Inspection
         perms = await get_cached_permissions(agent_role, db)
-        if perms is None:
-            raise HTTPException(status_code=403, detail="Role not found")
+        
+    if perms is None:
+        raise HTTPException(status_code=403, detail="Role not found")
 
-        if tool_name not in perms:
-            audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="BLOCKED", reason="Unauthorized tool")
-            db.add(audit)
-            await db.commit()
-            return {"error": f"SECURITY EXCEPTION: Unauthorized tool '{tool_name}'."}
+    if tool_name not in perms:
+        async with SessionLocal() as session:
+            async with session.begin():
+                audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="BLOCKED", reason="Unauthorized tool")
+                session.add(audit)
+        return {"error": f"SECURITY EXCEPTION: Unauthorized tool '{tool_name}'."}
 
-        if perms[tool_name] != "None" and perms[tool_name] in args.values():
-            audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="BLOCKED", reason="Restricted argument accessed")
-            db.add(audit)
-            await db.commit()
-            return {"error": "SECURITY EXCEPTION: Restricted argument accessed."}
+    if perms[tool_name] != "None" and perms[tool_name] in args.values():
+        async with SessionLocal() as session:
+            async with session.begin():
+                audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="BLOCKED", reason="Restricted argument accessed")
+                session.add(audit)
+        return {"error": "SECURITY EXCEPTION: Restricted argument accessed."}
 
-        audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="APPROVED", reason="Passed security")
-        db.add(audit)
-        await db.commit()
+    async with SessionLocal() as session:
+        async with session.begin():
+            audit = AuditLog(agent_role=agent_role, requested_tool=tool_name, arguments_passed=str(args), action_taken="APPROVED", reason="Passed security")
+            session.add(audit)
 
     # 4. SSE Stream
     async def event_stream():
