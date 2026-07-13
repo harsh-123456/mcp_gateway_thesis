@@ -9,6 +9,29 @@ on:
 jobs:
   test-and-validate:
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:15
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: adminpassword
+          POSTGRES_DB: gateway_db
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d gateway_db"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
 
     steps:
       - name: Checkout Repository
@@ -24,6 +47,9 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           uv pip install --system -r requirements.txt
           uv pip install --system pytest httpx
+
+      - name: Seed database
+        run: python seed_db.py
 
       - name: Run Security Tests
         run: pytest test_gateway.py
